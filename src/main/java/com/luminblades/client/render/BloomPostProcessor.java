@@ -8,23 +8,47 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.PostChain;
+import net.minecraft.client.renderer.PostPass;
 import net.minecraft.resources.ResourceLocation;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
 
-/**
- * Executa a cadeia assets/luminblades/shaders/post/lumin_bloom.json em uma instância PRÓPRIA de PostChain
- * (distorção -> extração -> blur gaussiano 2x -> composição). Só roda quando o chamador pede.
- */
 public final class BloomPostProcessor implements AutoCloseable {
     private static final ResourceLocation CHAIN_ID = new ResourceLocation(LuminBlades.MODID, "shaders/post/lumin_bloom.json");
 
     private PostChain chain;
+    private List<PostPass> passes = new ArrayList<>();
     private int width = -1, height = -1;
     private boolean failed;
 
     public boolean isLoaded() {
         return chain != null;
+    }
+
+    private void findPasses() {
+        passes = new ArrayList<>();
+        for (Field f : PostChain.class.getDeclaredFields()) {
+            if (!List.class.isAssignableFrom(f.getType())) continue;
+            try {
+                f.setAccessible(true);
+                Object v = f.get(chain);
+                if (v instanceof List<?> l && !l.isEmpty() && l.get(0) instanceof PostPass) {
+                    for (Object o : l) passes.add((PostPass) o);
+                    return;
+                }
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+            }
+        }
+        LuminBlades.LOGGER.error("Nao foi possivel localizar os passes do PostChain");
+    }
+
+    private void setUniform(String name, float value) {
+        for (PostPass p : passes) {
+            p.getEffect().safeGetUniform(name).set(value);
+        }
     }
 
     public void render(float partialTick, float intensity, float threshold, float blurRadius) {
@@ -37,7 +61,8 @@ public final class BloomPostProcessor implements AutoCloseable {
                 chain.resize(main.width, main.height);
                 width = main.width;
                 height = main.height;
-                LuminBlades.LOGGER.info("PostChain {} carregado ({}x{})", CHAIN_ID, width, height);
+                findPasses();
+                LuminBlades.LOGGER.info("PostChain {} carregado ({}x{}, {} passes)", CHAIN_ID, width, height, passes.size());
             } catch (IOException | JsonSyntaxException ex) {
                 LuminBlades.LOGGER.error("Falha ao carregar PostChain {}", CHAIN_ID, ex);
                 failed = true;
@@ -50,28 +75,27 @@ public final class BloomPostProcessor implements AutoCloseable {
             height = main.height;
         }
 
-        chain.setUniform("Intensity", intensity);
-        chain.setUniform("Threshold", threshold);
-        chain.setUniform("BlurRadius", blurRadius);
-        chain.setUniform("ImpactX", VfxManager.impactX);
-        chain.setUniform("ImpactY", VfxManager.impactY);
-        chain.setUniform("ImpactRadius", VfxManager.impactRadius);
-        chain.setUniform("ImpactStrength", VfxManager.impactStrength);
-
-        chain.setUniform("Time", mc.level == null ? 0f : (mc.level.getGameTime() + partialTick) / 20f);
-        chain.setUniform("LensX", CinematicManager.lensX);
-        chain.setUniform("LensY", CinematicManager.lensY);
-        chain.setUniform("LensRadius", CinematicManager.lensRadius);
-        chain.setUniform("LensFade", CinematicManager.lensFade);
-        chain.setUniform("LensR", CinematicManager.lensR);
-        chain.setUniform("LensG", CinematicManager.lensG);
-        chain.setUniform("LensB", CinematicManager.lensB);
-        chain.setUniform("OverlayMode", CinematicManager.overlayMode);
-        chain.setUniform("OverlayAlpha", CinematicManager.overlayAlpha);
-        chain.setUniform("OverlayProgress", CinematicManager.overlayProgress);
-        chain.setUniform("OverlayR", CinematicManager.overlayR);
-        chain.setUniform("OverlayG", CinematicManager.overlayG);
-        chain.setUniform("OverlayB", CinematicManager.overlayB);
+        setUniform("Intensity", intensity);
+        setUniform("Threshold", threshold);
+        setUniform("BlurRadius", blurRadius);
+        setUniform("ImpactX", VfxManager.impactX);
+        setUniform("ImpactY", VfxManager.impactY);
+        setUniform("ImpactRadius", VfxManager.impactRadius);
+        setUniform("ImpactStrength", VfxManager.impactStrength);
+        setUniform("Time", mc.level == null ? 0f : (mc.level.getGameTime() + partialTick) / 20f);
+        setUniform("LensX", CinematicManager.lensX);
+        setUniform("LensY", CinematicManager.lensY);
+        setUniform("LensRadius", CinematicManager.lensRadius);
+        setUniform("LensFade", CinematicManager.lensFade);
+        setUniform("LensR", CinematicManager.lensR);
+        setUniform("LensG", CinematicManager.lensG);
+        setUniform("LensB", CinematicManager.lensB);
+        setUniform("OverlayMode", CinematicManager.overlayMode);
+        setUniform("OverlayAlpha", CinematicManager.overlayAlpha);
+        setUniform("OverlayProgress", CinematicManager.overlayProgress);
+        setUniform("OverlayR", CinematicManager.overlayR);
+        setUniform("OverlayG", CinematicManager.overlayG);
+        setUniform("OverlayB", CinematicManager.overlayB);
 
         RenderSystem.disableBlend();
         RenderSystem.disableDepthTest();
@@ -83,13 +107,13 @@ public final class BloomPostProcessor implements AutoCloseable {
         RenderSystem.enableDepthTest();
     }
 
-    /** Chamado no reload de recursos (F3+T): libera a cadeia e permite nova tentativa. */
     @Override
     public void close() {
         if (chain != null) {
             chain.close();
             chain = null;
         }
+        passes = new ArrayList<>();
         failed = false;
     }
 }
