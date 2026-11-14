@@ -1,0 +1,93 @@
+{
+  "targets": [
+    "swap",
+    "swap2",
+    "bright",
+    "blur_a",
+    "blur_b"
+  ],
+  "passes": [
+    {
+      "name": "luminblades:distort",
+      "intarget": "minecraft:main",
+      "outtarget": "swap"
+    },
+    {
+      "name": "luminblades:bloom_extract",
+      "intarget": "swap",
+      "outtarget": "bright"
+    },
+    {
+      "name": "luminblades:bloom_blur",
+      "intarget": "bright",
+      "outtarget": "blur_a",
+      "uniforms": [
+        {
+          "name": "BlurDir",
+          "values": [
+            1.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "luminblades:bloom_blur",
+      "intarget": "blur_a",
+      "outtarget": "blur_b",
+      "uniforms": [
+        {
+          "name": "BlurDir",
+          "values": [
+            0.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "luminblades:bloom_blur",
+      "intarget": "blur_b",
+      "outtarget": "blur_a",
+      "uniforms": [
+        {
+          "name": "BlurDir",
+          "values": [
+            2.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "luminblades:bloom_blur",
+      "intarget": "blur_a",
+      "outtarget": "blur_b",
+      "uniforms": [
+        {
+          "name": "BlurDir",
+          "values": [
+            0.0,
+            2.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "luminblades:bloom_composite",
+      "intarget": "swap",
+      "outtarget": "swap2",
+      "auxtargets": [
+        {
+          "name": "BloomSampler",
+          "id": "blur_b"
+        }
+      ]
+    },
+    {
+      "name": "luminblades:cine_overlay",
+      "intarget": "swap2",
+      "outtarget": "minecraft:main"
+    }
+  ]
+}
